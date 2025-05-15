@@ -833,3 +833,528 @@ BEGIN
     CLOSE emp_cursor;
 END;
 /
+
+
+/*
+1.
+사원(employees) 테이블에서
+사원의 사원번호, 사원이름, 입사연도를 
+다음 기준에 맞게 각각 test01, test02에 입력하시오.
+
+입사년도가 2005년(포함) 이전 입사한 사원은 test01 테이블에 입력
+입사년도가 2005년 이후 입사한 사원은 test02 테이블에 입력
+*/
+
+DECLARE
+    CURSOR emp_cursor IS
+        SELECT employee_id,last_name,hire_date
+        FROM employees;
+    v_eid employees.employee_id%TYPE;
+    v_ename employees.last_name%TYPE;
+    v_hdate employees.hire_date%TYPE;
+BEGIN
+    OPEN emp_cursor;
+    LOOP
+        FETCH emp_cursor INTO v_eid, v_ename, v_hdate;
+        IF TO_CHAR(v_hdate, 'yyyy') <= '2005' THEN
+            INSERT INTO test01
+            (empid, ename, hiredate)
+            VALUES
+            (v_eid, v_ename, v_hdate);
+        ELSE
+            INSERT INTO test02
+            (empid, ename, hiredate)
+            VALUES
+            (v_eid, v_ename, v_hdate);
+        END IF;
+        EXIT WHEN emp_cursor%NOTFOUND;
+    END LOOP;
+    CLOSE emp_cursor;
+END;
+/
+
+/*
+2.
+부서번호를 입력할 경우(&치환변수 사용)
+해당하는 부서의 사원이름, 입사일자, 부서명을 출력하시오.
+*/
+
+DECLARE
+    CURSOR emp_cursor IS
+        SELECT last_name,hire_date,job_id
+        FROM employees
+        WHERE department_id = &부서번호;
+    v_eid employees.last_name%TYPE;
+    v_ename employees.hire_date%TYPE;
+    v_hdate employees.job_id%TYPE;
+BEGIN
+    OPEN emp_cursor;
+    LOOP
+        FETCH emp_cursor INTO v_eid, v_ename, v_hdate;
+        EXIT WHEN emp_cursor%NOTFOUND;
+        DBMS_OUTPUT.PUT_LINE(v_eid||' '||v_ename||' '||v_hdate);
+    END LOOP;
+    CLOSE emp_cursor;
+END;
+/
+/*
+3.
+부서번호를 입력(&사용)할 경우 
+사원이름, 급여, 연봉->(급여*12+(급여*nvl(커미션퍼센트,0)*12))
+을 출력하는  PL/SQL을 작성하시오.
+*/
+
+DECLARE
+    CURSOR emp_cursor IS
+        SELECT last_name,salary,commission_pct
+        FROM employees
+        WHERE department_id = &부서번호;
+    v_ename employees.last_name%TYPE;
+    v_salary employees.salary%TYPE;
+    v_cpct employees.commission_pct%TYPE;
+BEGIN
+    OPEN emp_cursor;
+    LOOP
+        FETCH emp_cursor INTO v_ename,v_salary,v_cpct;
+        DBMS_OUTPUT.PUT_LINE('연봉->'||' '||(v_salary*12+(v_salary*nvl(v_cpct,0)*12)));
+        EXIT WHEN emp_cursor%NOTFOUND;
+    END LOOP;
+    CLOSE emp_cursor;
+END;
+/
+
+DECLARE
+    CURSOR emp_cursor IS
+        SELECT last_name,salary,commission_pct
+        FROM employees
+        WHERE department_id = &부서번호;
+    v_emp_info emp_cursor%ROWTYPE;
+    v_annual NUMBER(15, 2);
+BEGIN
+    OPEN emp_cursor;
+    LOOP
+        FETCH emp_cursor INTO v_emp_info;
+        v_annual := (v_emp_info.salary*12+(v_emp_info.salary*nvl(v_emp_info.commission_pct,0)*12));
+        DBMS_OUTPUT.PUT_LINE('연봉->'||' '||v_annual);
+        EXIT WHEN emp_cursor%NOTFOUND;
+    END LOOP;
+    CLOSE emp_cursor;
+END;
+/
+
+DECLARE
+    CURSOR emp_cursor IS
+        SELECT salary*12+(salary*nvl(commission_pct,0)*12) AS ann
+        FROM employees
+        WHERE department_id = &부서번호;
+    v_emp_info emp_cursor%ROWTYPE;
+BEGIN
+    OPEN emp_cursor;
+    LOOP
+        FETCH emp_cursor INTO v_emp_info;
+        DBMS_OUTPUT.PUT_LINE('연봉->'||' '||v_emp_info.ann);
+        EXIT WHEN emp_cursor%NOTFOUND;
+    END LOOP;
+    CLOSE emp_cursor;
+END;
+/
+
+--커서 FOR LOOP : 명시적 커서 단축방법
+SELECT employee_id, last_name, hire_date
+FROM employees
+WHERE department_id = &부서번호;
+
+DECLARE
+    --커서 정의
+    CURSOR emp_cursor IS
+        SELECT employee_id, last_name, hire_date
+        FROM employees
+        WHERE department_id = &부서번호;
+BEGIN
+    -- 명령어 사용 VS 커서 FOR LOOP
+    FOR emp_rec IN emp_cursor LOOP -- 암묵적으로 OPEN, FETCH
+        -- 데이터가 존재하는 경우
+        -- 명시적 커서의 속성에 접근 가능
+        DBMS_OUTPUT.PUT(emp_cursor%ROWCOUNT || ' : ');
+        DBMS_OUTPUT.PUT(emp_rec.employee_id|| ', ');
+        DBMS_OUTPUT.PUT(emp_rec.last_name|| ', ');
+        DBMS_OUTPUT.PUT(emp_rec.hire_date);
+        DBMS_OUTPUT.NEW_LINE;
+    END LOOP; -- 암묵적으로 CLOSE
+    --DBMS_OUTPUT.PUT_LINE(emp_cursor%ROWCOUNT);
+    CLOSE emp_cursor;
+END;
+/
+
+--사용방법 정리
+DECLARE
+    -- 1) 커서 정의
+    CURSOR 커서명 IS
+        커서가 실행할 SELECT문;
+BEGIN
+    -- 2) 커서 실행
+    -- 3) 데이터 확인 및 반환
+    FOR 임시변수(레코드타입) IN 커서명 LOOP
+        -- 데이터가 존재하는 경우에만 실행
+        -- => 커서 FOR LOOP는 반드시 데이터가 있는 경우만
+        -- 명시적 커서의 속성에 접근 가능
+    END LOOP; -- 4) 커서 종료
+END;
+/
+
+DECLARE
+    CURSOR emp_cursor IS
+        SELECT last_name,hire_date,job_id
+        FROM employees
+        WHERE department_id = &부서번호;
+BEGIN
+    FOR emp_rec IN emp_cursor LOOP
+        DBMS_OUTPUT.PUT_LINE(emp_rec.last_name||' '||emp_rec.hire_date||' '||emp_rec.job_id);
+    END LOOP;
+END;
+/
+
+--예외처리
+DECLARE
+    v_ename employees.last_name%TYPE;
+BEGIN
+    SELECT last_name
+    INTO v_ename
+    FROM employees
+    WHERE employees_id = &사원번호;
+    DBMS_OUTPUT.PUT_LINE(v_ename);
+END;
+/
+
+--문법
+DECLARE
+    -- 변수, 커서, 레코드 타입 등 선언부
+BEGIN
+    -- 실행
+EXCEPTION
+    -- 예외처리
+    WHEN 예외이름1 THEN
+        예외가 발생했을 때 실행할 코드;
+    WHEN 예외이름2 THEN
+        예외가 발생했을 때 실행할 코드;
+    WHEN OTHERS THEN
+        위에 선언되지 않은 예외가 발생한 경우 실행할 코드;
+END;
+/
+-- 1) 예외유형 : 이미 정의되어 있고 이름도 존재하는 예외사항
+-- 1. 이미 정의되어 있고 이름도 있는 예외
+DECLARE
+    v_ename employees.last_name%TYPE;
+BEGIN
+    SELECT last_name
+    INTO   v_ename
+    FROM   employees
+    WHERE  department_id = &부서번호;
+    
+    -- 부서번호 10 : 정상 실행
+    -- 부서번호 50 : TOO_MANY_ROWS / ORA-01422
+    -- 부서번호  0 : NO_DATA_FOUND / ORA-01403
+    DBMS_OUTPUT.PUT_LINE(v_ename);
+EXCEPTION
+    WHEN TOO_MANY_ROWS THEN
+    DBMS_OUTPUT.PUT_LINE('여러 행이 반환되었습니다');
+    WHEN OTHERS THEN
+    DBMS_OUTPUT.PUT_LINE('기타 예외가 반환되었습니다');
+END;
+/
+-- 2) 예외유형 : 이미 정의는 되어있지만 이름이 존재하지 않는 예외 
+DECLARE
+    -- 2-1) 예외이름 선언
+    e_emps_remaining EXCEPTION;
+    -- 2-2) 예외이름과 에러코드 연결
+    RPAGMA EXCEPTION_INIT(e_emps_remaining,-02292);
+BEGIN
+    DELETE FROM departments
+    WHERE department_id = &부서번호;
+EXCEPTION
+    WHEN e_emps_remaining THEN
+        DBMS_OUTPUT.PUT_LINE('참조 데이터가 있습니다.');
+END;
+/
+--3)
+DECLARE
+    e_dept_del_fail EXCEPTION;
+BEGIN
+    DELETE FROM departments
+    WHERE department_id = 0;
+    -- 3-2) 예외가 되는 상황을 설정
+    IF SQL%ROWCOUNT = 0 THEN
+        RAISE e_dept_del_fail;
+    END IF;
+    DBMS_OUTPUT.PUT_LINE('정상적으로 삭제되었습니다.');
+EXCEPTION
+    WHEN e_dept_del_fail THEN
+        DBMS_OUTPUT.PUT_LINE('해당 부서는 존재하지 않습니다.');
+        DBMS_OUTPUT.PUT_LINE('부서번호를 확인해주세요.');
+END;
+/
+
+-- 1) 예외유형 : 이미 정의되어 있고 이름도 존재하는 예외사항
+-- 예시
+DECLARE
+    v_ename employees.last_name%TYPE;
+BEGIN
+    SELECT last_name
+    INTO   v_ename
+    FROM   employees
+    WHERE  department_id = &부서번호;
+    -- 부서번호 10 : 정상실행
+    -- 부서번호 50 : TOO_MANY_ROWS / ORA-01422
+    -- 부서번호 0  : NO_DATA_FOUND / ORA-01403
+    DBMS_OUTPUT.PUT_LINE(v_ename);
+EXCEPTION
+    WHEN TOO_MANY_ROWS THEN
+        DBMS_OUTPUT.PUT_LINE('여러 행이 반환됐습니다');
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('기타 예외 발생');
+        DBMS_OUTPUT.PUT_LINE('ORA-' || SQLCODE);
+        DBMS_OUTPUT.PUT_LINE(SQLERRM);
+END;
+/
+
+/*
+1.
+drop table emp_test;
+
+create table emp_test
+as
+  select employee_id, last_name
+  from   employees
+  where  employee_id < 200;
+
+emp_test 테이블에서 사원번호를 사용(&치환변수 사용)하여 
+사원을 삭제하는 PL/SQL을 작성하시오.
+(단, 사용자 정의 예외사항 사용)
+(단, 사원이 없으면 "해당사원이 없습니다.'라는 오류메시지 발생)
+*/
+
+drop table emp_test;
+
+create table emp_test
+as
+  select employee_id, last_name
+  from   employees
+  where  employee_id < 200;
+  
+INSERT INTO emp_test(
+    employee_id,
+    last_name)
+VALUES(
+    22,
+    'last');
+  
+/*
+emp_test 테이블에서 사원번호를 사용(&치환변수 사용)하여 
+사원을 삭제하는 PL/SQL을 작성하시오.
+(단, 사용자 정의 예외사항 사용)
+(단, 사원이 없으면 "해당사원이 없습니다.'라는 오류메시지 발생)
+*/
+DECLARE
+    e_emp_del_fail EXCEPTION;
+BEGIN
+    DELETE FROM emp_test
+    WHERE employee_id = &사원번호;
+    -- 3-2) 예외가 되는 상황을 설정
+    IF SQL%ROWCOUNT = 0 THEN
+        RAISE e_emp_del_fail;
+    END IF;
+    DBMS_OUTPUT.PUT_LINE('정상적으로 삭제되었습니다.');
+EXCEPTION
+    WHEN e_emp_del_fail THEN
+        DBMS_OUTPUT.PUT_LINE('해당사원이 없습니다.');
+END;
+/
+
+-- PROCEDURE : 독립된 기능을 구현하는 PL/SQL의 객체 중 하나
+CREATE PROCEDURE test_pro_01 (p_msg IN VARCHAR2)
+-- 매개변수로 선언할 경우 데이터 타입의 크기는 지정하지 않음
+IS
+    -- 선언부 : 변수, 커서, 예외 등
+    v_msg VARCHAR2(1000) := 'Hello! ';
+BEGIN
+    -- 실행
+    DBMS_OUTPUT.PUT_LINE(v_msg || p_msg);
+    EXCEPTION
+    -- 예외처리
+    WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('데이터가 존재하지 않습니다.');
+END;
+/
+
+--실행
+BEGIN
+    test_pro_01('hihi');
+END;
+/
+
+--실행
+DECLARE
+    v_result VARCHAR2(1000);
+BEGIN
+    -- v_result := test_pro_01('hihi2');
+    -- 오라클은 프로시저와 함수를 호출하는 방식으로 구분
+    -- => 프로시저를 호출할 때 왼쪽에 변수가 존재하면 안됨.
+    -- 프로시저는 함수처럼 값을 반환해서 
+    -- 변수에 할당하는 방식으로 호출할 수 없다는 뜻 
+    test_pro_01('hihi2');
+END;
+/
+
+EXECUTE test_pro_01('hihi3');
+
+DROP PROCEDURE test_pro_01;
+
+
+-- IN 모드 : 호출환경 -> 프로시저
+-- IN 모드 : 호출환경 -> 프로시저
+drop PROCEDURE raise_salary;
+CREATE PROCEDURE raise_salary
+(p_eid IN employees.employee_id%TYPE)
+IS
+
+BEGIN
+    -- IN모드 : 상수로 인식
+    -- p_eid := NVL(p_eid, 100);
+    
+    UPDATE employees
+    SET salary = salary * 1.1
+    WHERE employee_id = p_eid;
+END;
+/
+
+DECLARE
+    v_first NUMBER(3,0) := 100;
+BEGIN
+    raise_salary(149);          --리터럴
+    raise_salary(2 * v_first);  --표현식(계산식)
+    raise_salary(v_first);      --값을 가진 변수
+END;
+/
+
+SELECT employee_id, salary
+FROM employees
+WHERE employee_id IN (100, 149, 200);
+
+-- OUT 모드 : 프로시저 -> 호출환경
+-- 1) 매개변수로 전달되는 것이 있어도 무조건 null로 값을 가짐
+-- 2) OUT 모드의 매개변수가 가진 최종 값을 호출환경으로 반환
+CREATE PROCEDURE test_p_out
+(p_num IN NUMBER,
+ p_out OUT NUMBER)
+ IS
+
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('IN : ' || p_num);
+    DBMS_OUTPUT.PUT_LINE('OUT : ' || p_out);
+END;
+/
+
+DECLARE
+    v_result NUMBER(4,0) := 1234;
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('1) result : ' || v_result);
+    test_p_out(1000,v_result);
+    DBMS_OUTPUT.PUT_LINE('2) result : ' || v_result);
+END;
+/
+
+-- 더하기
+CREATE PROCEDURE plus
+(p_x IN NUMBER, 
+ p_y IN NUMBER,
+ p_result OUT NUMBER)
+IS
+
+BEGIN
+    -- return ( x + y ); -> 함수방식
+    p_result := (p_x + p_y);
+END;
+/
+
+DECLARE
+    v_total NUMBER(10,0);
+BEGIN
+    plus(10, 25, v_total);
+    DBMS_OUTPUT.PUT_LINE(v_total);
+END;
+/
+drop procedure format_phone;
+-- IN OUT 모드 : 호출환경 <-> 프로시저
+-- '01012341234' => '010-1234-1234'
+CREATE OR REPLACE PROCEDURE format_phone
+(p_phone_no IN OUT VARCHAR2)
+IS
+BEGIN
+    -- 1) OUT 모드와 달리 호출환경에서 전달받은 값을 가질 수 있음
+    DBMS_OUTPUT.PUT_LINE('before : ' || p_phone_no);
+    -- 2) IN 모드와 달리 값을 변경할 수 있음
+    p_phone_no := SUBSTR(p_phone_no, 1, 3)
+                || '-' || SUBSTR(p_phone_no, 4, 4)
+                || '-' || SUBSTR(p_phone_no, 8);
+    -- 3) OUT 모드처럼 최종 값을 호출환경으로 반환
+    DBMS_OUTPUT.PUT_LINE('after : ' || p_phone_no);
+END;
+/
+
+DECLARE
+    v_no VARCHAR2(100) := '01012341234';
+BEGIN
+    format_phone(v_no);
+    DBMS_OUTPUT.PUT_LINE(v_no);
+END;
+/
+
+/*
+1.
+주민등록번호를 입력하면 
+다음과 같이 출력되도록 yedam_ju 프로시저를 작성하시오.
+
+EXECUTE yedam_ju('9501011667777');
+950101-1******
+EXECUTE yedam_ju('1511013689977');
+151101-3******
+
+*/
+
+CREATE PROCEDURE pnum
+(p_id IN VARCHAR2);
+IS
+    v_result VARCHAR2(20);
+BEGIN
+    v_result := SUBSTR(p_id, 1, 6) 
+    --|| '-' || SUBSTR(p_id, 7, 1) || '******';
+    || '-' || RPAD(SUBSTR(p_id, 7, 1), 7, '*');
+    DBMS_OUTPUT.PUT_LINE(v_result);
+END;
+/
+
+/*
+2.
+다음과 같이 PL/SQL 블록을 실행할 경우 
+사원번호를 입력할 경우 사원의 이름(last_name)의 첫번째 글자를 제외하고는
+'*'가 출력되도록 yedam_emp 프로시저를 생성하시오.
+
+실행) EXECUTE yedam_emp(176);
+실행결과) TAYLOR -> T*****  <- 이름 크기만큼 별표(*) 출력
+*/
+
+/*
+3.
+부서번호를 입력할 경우 
+해당부서에 근무하는 사원의 사원번호, 사원이름(last_name), 연차를 출력하는 get_emp 프로시저를 생성하시오. 
+(cursor 사용해야 함)
+단, 사원이 없을 경우 "해당 부서에는 사원이 없습니다."라고 출력(exception 사용)
+실행) EXECUTE get_emp(30);
+*/
+
+/*
+4.
+직원들의 사번, 급여 증가치만 입력하면 Employees테이블에 쉽게 사원의 급여를 갱신할 수 있는 y_update 프로시저를 작성하세요. 
+만약 입력한 사원이 없는 경우에는 ‘No search employee!!’라는 메시지를 출력하세요.(예외처리)
+실행) EXECUTE y_update(200, 10);
+*/
