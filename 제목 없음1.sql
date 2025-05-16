@@ -1333,6 +1333,11 @@ BEGIN
 END;
 /
 
+SELECT last_name
+    ,RPAD(last_name,10,'-')
+    ,LPAD(last_name,10,'-')
+FROM employees;
+
 /*
 2.
 다음과 같이 PL/SQL 블록을 실행할 경우 
@@ -1343,18 +1348,460 @@ END;
 실행결과) TAYLOR -> T*****  <- 이름 크기만큼 별표(*) 출력
 */
 
+CREATE PROCEDURE yedam_emp
+(p_id IN employees.employee_id%TYPE)
+IS
+  v_masked_name VARCHAR2(100);
+BEGIN
+    SELECT RPAD(SUBSTR(last_name, 1, 1), LENGTH(last_name)-1, '*')
+    INTO v_masked_name
+    FROM employees
+    WHERE employee_id = p_id;
+    DBMS_OUTPUT.PUT_LINE(v_masked_name);
+END;
+/
+drop procedure yedam_emp;
+EXECUTE yedam_emp(176);
+
 /*
 3.
 부서번호를 입력할 경우 
-해당부서에 근무하는 사원의 사원번호, 사원이름(last_name), 연차를 출력하는 get_emp 프로시저를 생성하시오. 
+해당부서에 근무하는 사원의 사원번호, 사원이름(last_name), 
+연차를 출력하는 get_emp 프로시저를 생성하시오. 
 (cursor 사용해야 함)
-단, 사원이 없을 경우 "해당 부서에는 사원이 없습니다."라고 출력(exception 사용)
+단, 사원이 없을 경우 "해당 부서에는 사원이 없습니다."라고 
+출력(exception 사용)
 실행) EXECUTE get_emp(30);
 */
 
+CREATE PROCEDURE get_emp
+    (d_id IN employees.hire_date%TYPE)
+IS
+    v_date NUMBER(20);
+    v_months NUMBER(20);
+BEGIN
+    v_date := TRUNC(MONTHS_BETWEEN(SYSDATE, d_id) / 12);
+    v_months := FLOOR(MOD(MONTHS_BETWEEN(sysdate, d_id),12));
+    DBMS_OUTPUT.PUT(v_date||'년 '||v_months||'개월');
+    DBMS_OUTPUT.NEW_LINE;
+END;
+/
+drop procedure get_emp;
+
+DECLARE
+    CURSOR emp_cursor IS
+        SELECT employee_id, last_name, hire_date
+        FROM employees
+        WHERE department_id = &부서번호;
+    v_eid employees.employee_id%TYPE;
+    v_ename employees.last_name%TYPE;
+    v_hdate employees.hire_date%TYPE;
+BEGIN
+    OPEN emp_cursor;
+    LOOP
+        FETCH emp_cursor INTO v_eid, v_ename, v_hdate;
+        EXIT WHEN emp_cursor%NOTFOUND;
+        DBMS_OUTPUT.PUT(v_eid||' '||v_ename||' ');
+        get_emp(v_hdate);
+    END LOOP;
+    IF emp_cursor%ROWCOUNT = 0 THEN
+    DBMS_OUTPUT.PUT_LINE('해당 부서에는 사원이 없습니다.');
+    CLOSE emp_cursor;
+    END IF;
+END;
+/
+
 /*
 4.
-직원들의 사번, 급여 증가치만 입력하면 Employees테이블에 쉽게 사원의 급여를 갱신할 수 있는 y_update 프로시저를 작성하세요. 
-만약 입력한 사원이 없는 경우에는 ‘No search employee!!’라는 메시지를 출력하세요.(예외처리)
+직원들의 사번, 급여 증가치만 입력하면 
+Employees테이블에 쉽게 사원의 급여를 갱신할 수 있는 
+y_update 프로시저를 작성하세요. 
+만약 입력한 사원이 없는 경우에는 ‘No search employee!!’라는 
+메시지를 출력하세요.(예외처리)
 실행) EXECUTE y_update(200, 10);
 */
+
+CREATE PROCEDURE y_update
+    (d_id IN employees.employee_id%TYPE,
+     d_inc IN NUMBER)
+IS
+BEGIN
+    UPDATE employees
+    SET salary = salary + (salary * (d_inc/100))
+    WHERE employee_id = d_id;
+    
+    IF SQL%ROWCOUNT = 0 THEN
+        RAISE e_no_emp;
+    END IF;
+EXCEPTION
+    WHEN e_no_emp THEN
+        DBMS_OUTPUT.PUT_LINE('No search employee!!');
+END;
+/
+
+drop procedure y_update;
+
+EXECUTE y_update(104,10);
+
+-- FUNCTION : 독립된 기능을 구현하는 PL/SQL의 객체 중 하나, 계산용
+CREATE FUNCTION test_func
+(p_msg VARCHAR2)
+RETURN VARCHAR2
+IS
+    -- 선언부 : 변수, 커서, 타입, 예외 등 선언
+    v_msg VARCHAR2(1000) := 'Hello!';
+BEGIN
+    -- 실행
+    -- DBMS_OUTPUT.PUT_LINE(v_msg || p_msg);
+    RETURN (v_msg || p_msg);
+EXCEPTION
+    -- 예외철
+    WHEN NO_DATA_FOUND THEN
+        RETURN '데이터가 존재하지 않습니다.';
+END;
+/
+
+-- 실행 방법
+DECLARE
+    v_result VARCHAR2(1000);
+BEGIN
+    v_result := test_func('PL/SQL');
+    DBMS_OUTPUT.PUT_LINE(v_result);
+END;
+/
+
+SELECT test_func('PL/SQL')
+FROM dual;
+
+CREATE FUNCTION plus_func
+(p_x IN NUMBER,
+p_y IN NUMBER)
+RETURN NUMBER
+IS
+BEGIN
+    RETURN (p_x + p_y);
+END;
+/
+
+-- 내부 DML 없음 + RETURN 숫자 => SQL문에서 사용가능
+SELECT plus_func(20,15)
+FROM employees;
+
+-- 해당 사원의 직속상사 이름을 출력 => 함수
+SELECT e2.last_name
+FROM employees e1 
+JOIN employees e2 
+ON e1.manager_id = e2.employee_id
+WHERE e1.employee_id = 101;
+
+CREATE FUNCTION find_it
+(p_eid IN employees.employee_id%TYPE)
+RETURN VARCHAR2
+IS
+    m_name employees.last_name%TYPE;
+BEGIN
+    SELECT e2.last_name
+    INTO m_name
+    FROM employees e1 
+        JOIN employees e2 
+        ON e1.manager_id = e2.employee_id
+    WHERE e1.employee_id = p_eid;
+    RETURN m_name;
+END;
+/
+
+drop function find_it;
+
+SELECT employee_id
+      ,last_name
+      ,find_it(employee_id) e2
+FROM employees;
+
+
+/*
+1.
+사원번호를 입력하면 
+last_name + first_name 이 출력되는 
+y_yedam 함수를 생성하시오.
+
+실행) EXECUTE DBMS_OUTPUT.PUT_LINE(y_yedam(174))
+출력 예)  Abel Ellen
+
+SELECT employee_id, y_yedam(employee_id)
+FROM   employees;
+*/
+
+CREATE FUNCTION y_yedam
+(p_eid IN employees.employee_id%TYPE)
+RETURN VARCHAR2
+IS
+    m_fname employees.last_name%TYPE;
+    m_lname employees.last_name%TYPE;
+    m_full employees.last_name%TYPE;
+BEGIN
+    SELECT first_name, last_name
+    INTO m_fname, m_lname
+    FROM employees
+    WHERE employee_id = p_eid;
+    
+    m_full := m_lname||' '||m_fname;
+    RETURN m_full;
+END;
+/
+drop function y_yedam;
+EXECUTE DBMS_OUTPUT.PUT_LINE(y_yedam(174));
+
+SELECT employee_id, y_yedam(employee_id)
+FROM   employees;
+
+/*
+2.
+사원번호를 입력할 경우 다음 조건을 만족하는 결과가 출력되는 ydinc 함수를 생성하시오.
+- 급여가 5000 이하이면 20% 인상된 급여 출력
+- 급여가 10000 이하이면 15% 인상된 급여 출력
+- 급여가 20000 이하이면 10% 인상된 급여 출력
+- 급여가 20000 초과이면 급여 그대로 출력
+실행) SELECT last_name, salary, YDINC(employee_id)
+     FROM   employees; 
+*/
+
+CREATE FUNCTION ydinc
+(p_eid IN employees.employee_id%TYPE)
+RETURN NUMBER
+IS
+    v_salary employees.salary%TYPE;
+    v_new employees.salary%TYPE;
+BEGIN
+    SELECT salary
+    INTO v_salary
+    FROM employees
+    WHERE employee_id = p_eid;
+    
+    IF v_salary <= 5000 THEN
+    v_new := v_salary*1.2;
+    ELSIF v_salary <= 10000 THEN
+    v_new := v_salary*1.15;
+    ELSIF v_salary <= 20000 THEN
+    v_new := v_salary*1.1;
+    ELSE
+    v_new := v_salary*1;
+    END IF;
+    
+    RETURN v_new;
+END;
+/
+drop function ydinc;
+
+SELECT last_name, salary, YDINC(employee_id)
+FROM   employees;
+
+IF v_salary <= 5000 THEN
+    v_raise := 20;
+    ELSIF v_salary <= 10000 THEN
+    v_raise := 15;
+    ELSIF v_salary <= 15000 THEN
+    v_raise := 10;
+    ELSE
+    v_raise := 0;
+    END IF;
+    v_new := v_salary + (v_salary*(v_raise / 100));
+    
+CREATE FUNCTION ydinc2
+(p_eid IN employees.employee_id%TYPE)
+RETURN NUMBER
+IS
+    v_salary employees.salary%TYPE;
+    v_raise NUMBER(10);
+    v_new employees.salary%TYPE;
+BEGIN
+    SELECT salary
+    INTO v_salary
+    FROM employees
+    WHERE employee_id = p_eid;
+    
+    IF v_salary <= 5000 THEN
+    v_raise := 20;
+    ELSIF v_salary <= 10000 THEN
+    v_raise := 15;
+    ELSIF v_salary <= 15000 THEN
+    v_raise := 10;
+    ELSE
+    v_raise := 0;
+    END IF;
+    v_new := v_salary + (v_salary*(v_raise / 100));
+    
+    RETURN v_new;
+END;
+/
+drop function ydinc2;
+
+SELECT last_name, salary, YDINC2(employee_id)
+FROM   employees;
+
+-- 2번
+DECLARE
+    v_dptn departments.department_name%TYPE;
+    v_jid employees.job_id%TYPE;
+    v_sal employees.salary%TYPE;
+BEGIN
+    SELECT d.department_name,
+           e.job_id,
+           NVL(e.salary*12, 0)
+    INTO v_dptn, v_jid, v_sal
+    FROM employee e 
+    LEFT JOIN departments d
+    ON e.department_id = d.department_id
+    WHERE e.employee_id = &사원번호;
+    DBMS_OUTPUT.PUT('부서이름: '||v_dptn||' 업무명: '||v_jid||' 연간 총수입: '||v_sal);
+    DBMS_OUTPUT.NEW_LINE;
+END;
+/
+
+-- 3번
+DECLARE
+    v_str VARCHAR2(20);
+    v_hdate employee.hire_date%TYPE;
+BEGIN
+    SELECT hire_date
+    INTO v_hdate
+    FROM employees
+    WHERE employee_id = &사원번호;
+    
+    IF TO_CHAR(v_hdate, 'yyyy') >= '2005' THEN
+        v_str := 'New employee';
+    ELSE
+        v_str := 'Career employee';
+    END IF;
+    DBMS_OUTPUT.PUT_LINE(v_str);
+END;
+/
+
+-- 4번
+BEGIN
+    FOR idx2 IN 1 .. 9 LOOP
+        FOR idx IN 1 .. 9 LOOP
+            IF MOD(idx,2) != 0 THEN
+                DBMS_OUTPUT.PUT(idx||'*'||idx2||'='||idx*idx2||' ');
+            END IF;  
+        END LOOP;
+        DBMS_OUTPUT.NEW_LINE;
+    END LOOP;
+END;
+/
+
+-- 5번
+DECLARE
+    CURSOR emp_cursor IS
+        SELECT employee_id,
+           last_name,
+           salary
+           FROM employees
+           WHERE department_id = &부서번호;
+BEGIN
+    FOR emp_rec IN emp_cursor LOOP
+        DBMS_OUTPUT.PUT_LINE('사번: '||emp_rec.employee_id||' 이름: '||emp_rec.last_name||' 급여: '||emp_rec.salary);
+    END LOOP;
+END;
+/
+
+-- 6번
+CREATE PROCEDURE update_sal
+(p_id employees.salary%TYPE,
+ p_new NUMBER)
+IS
+no_result EXCEPTION;
+BEGIN
+    UPDATE employees
+    SET salary = salary + (salary*(p_new/100))
+    WHERE employee_id = p_id;
+    
+    IF SQL%ROWCOUNT = 0 THEN
+    RAISE no_result;
+    END IF;
+    EXCEPTION
+        WHEN no_result THEN
+        DBMS_OUTPUT.PUT_LINE('No search employee!!');
+END;
+/
+
+-- 7번
+CREATE PROCEDURE pnum
+(p_id IN VARCHAR2)
+IS
+    v_fid DATE;
+    v_chkmf VARCHAR2(20);
+    v_chkage VARCHAR2(20);
+BEGIN
+    v_fid := SUBSTR(p_id, 1, 6);
+    v_chkmf := SUBSTR(p_id, 7, 1);
+    IF MOD(SUBSTR(p_id, 7, 1), 2) = 0 THEN
+        IF v_chkmf = 2 THEN
+           v_fid := '19'||v_fid;       
+        ELSE
+           v_fid := '20'||v_fid;
+        END IF;
+    v_chkage := TRUNC(MONTHS_BETWEEN(TRUNC(sysdate), v_fid)/12);
+    DBMS_OUTPUT.PUT('만 '||v_chkage||'세'||' 성별: '||'여성');
+    ELSE
+        IF v_chkmf = 1 THEN
+           v_fid := '19'||v_fid;       
+        ELSE
+           v_fid := '20'||v_fid;
+        END IF;
+    v_chkage := TRUNC(MONTHS_BETWEEN(TRUNC(sysdate), v_fid)/12);
+    DBMS_OUTPUT.PUT('만 '||v_chkage||'세'||' 성별: '||'남성');
+    END IF;
+    DBMS_OUTPUT.NEW_LINE;
+END;
+/
+
+-- 8번
+CREATE FUNCTION prntyear
+(p_id NUMBER)
+RETURN NUMBER
+IS
+    v_hdate NUMBER;
+BEGIN
+    SELECT TRUNC(MONTHS_BETWEEN(SYSDATE, hire_date) / 12)
+    INTO v_hdate
+    FROM employees
+    WHERE employee_id = p_id;
+    RETURN v_hdate;
+END;
+/
+
+-- 9번
+CREATE FUNCTION prntmgr
+(d_nm departments.department_name%TYPE)
+RETURN VARCHAR2
+IS
+    v_mgrname VARCHAR2(30);
+BEGIN
+    SELECT last_name
+    INTO v_mgrname
+    FROM employees
+    WHERE employee_id = (SELECT manager_id
+                          FROM departments
+                          WHERE department_name = d_nm);
+    RETURN v_mgrname;
+END;
+/
+
+-- 10번
+SELECT name, text
+FROM user_source
+WHERE type
+IN ('PROCEDURE', 'FUNCTION', 'PACKAGE', 'PACKAGE BODY');
+
+-- 11번
+DECLARE 
+    v_count NUMBER(1,0) := 0;
+    v_str varchar2(20) := '**********';
+BEGIN
+    LOOP
+        v_count := v_count + 1;
+        DBMS_OUTPUT.PUT_LINE(LPAD(SUBSTR(v_str,1,v_count),10,'-'));
+        EXIT WHEN v_count >= 9;
+    END LOOP;
+END;
+/
